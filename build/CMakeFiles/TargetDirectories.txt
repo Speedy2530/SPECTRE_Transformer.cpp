@@ -1,0 +1,3 @@
+/Users/speedy2530/Transformer/build/CMakeFiles/test_tensor.dir
+/Users/speedy2530/Transformer/build/CMakeFiles/edit_cache.dir
+/Users/speedy2530/Transformer/build/CMakeFiles/rebuild_cache.dir
