@@ -9,7 +9,7 @@
 
 class Tensor;
 
-// Used to store computation graph info
+// Used to store computation graph info for autograd
 struct GradFn {
     std::string op_type;
     std::vector<std::shared_ptr<Tensor>> parents;
@@ -37,13 +37,13 @@ public:
     // ===== Core Ops =====
     std::shared_ptr<Tensor> operator+(const std::shared_ptr<Tensor>& other);
     std::shared_ptr<Tensor> operator*(float scalar);
-    std::shared_ptr<Tensor> zero();
     std::shared_ptr<Tensor> dot(const std::shared_ptr<Tensor>& other);
-    std::shared_ptr<Tensor> matmul(const std::shared_ptr<Tensor>& other);
+
+    // Consider adding GeLu
     std::shared_ptr<Tensor> relu();
     std::shared_ptr<Tensor> sin();
 
-    // ===== Optional Utilities =====
+    // ===== Utilities =====
     std::pair<int, int> shape() const;
     void print(const std::string& label = "") const;
     std::shared_ptr<Tensor> clone() const;
