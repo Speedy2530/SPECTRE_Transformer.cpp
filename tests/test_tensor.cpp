@@ -83,3 +83,8 @@ TEST_CASE("Tensor dot and backward") {
     CHECK(a->grad.isApprox(dL_dA));
     CHECK(b->grad.isApprox(dL_dB));
 }
+
+
+TEST_CASE("Tracing back a full conputation graph") {
+    // To Do
+}
