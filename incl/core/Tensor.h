@@ -24,6 +24,12 @@ public:
     bool requires_grad = false;
     std::shared_ptr<GradFn> grad_fn = nullptr;
 
+    // Track shape if needed
+    int batch_size = 1;
+    int seq_len = 1;
+    int hidden_dim = 1;
+
+
     // ===== Constructors =====
     // Shape constructor
     Tensor(int rows, int cols, bool requires_grad = false);
@@ -36,12 +42,23 @@ public:
 
     // ===== Core Ops =====
     std::shared_ptr<Tensor> operator+(const std::shared_ptr<Tensor>& other);
+    std::shared_ptr<Tensor> operator-(const std::shared_ptr<Tensor>& other);
+    std::shared_ptr<Tensor> operator/(float scalar);
     std::shared_ptr<Tensor> operator*(float scalar);
-    std::shared_ptr<Tensor> dot(const std::shared_ptr<Tensor>& other);
+    std::shared_ptr<Tensor> matmul(const std::shared_ptr<Tensor>& other);
 
-    // Consider adding GeLu
-    std::shared_ptr<Tensor> relu();
+    std::shared_ptr<Tensor> relu(); // Consider adding GeLu
     std::shared_ptr<Tensor> sin();
+    std::shared_ptr<Tensor> cos();
+
+    // ===== Reshaping / Transpose =====
+    std::shared_ptr<Tensor> transpose();
+    std::shared_ptr<Tensor> reshape(int new_rows, int new_cols);
+
+    // ===== Head Management =====
+    std::vector<std::shared_ptr<Tensor>> split_heads(int num_heads);
+    std::shared_ptr<Tensor> concat_heads(const std::vector<std::shared_ptr<Tensor>>& heads);
+
 
     // ===== Utilities =====
     std::pair<int, int> shape() const;

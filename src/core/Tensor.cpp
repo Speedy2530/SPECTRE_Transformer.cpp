@@ -58,13 +58,44 @@ std::shared_ptr<Tensor> Tensor::operator+(const std::shared_ptr<Tensor>& other) 
     return out;
 }
 
-std::shared_ptr<Tensor> Tensor::operator*(float scalar) {
-    bool req_grad = requires_grad;
-    auto out = std::make_shared<Tensor>(data * scalar, req_grad);
+std::shared_ptr<Tensor> Tensor::operator-(const std::shared_ptr<Tensor>& other) {
+    assert(data.rows() == other->data.rows() && data.cols() == other->data.cols());
+    auto out = std::make_shared<Tensor>(data - other->data, requires_grad || other->requires_grad);
 
-    if (req_grad) {
+    if (out->requires_grad) {
         out->grad_fn = std::make_shared<GradFn>();
-        out->grad_fn->op_type = "scale";
+        out->grad_fn->op_type = "sub";
+        out->grad_fn->parents = {shared_from_this(), other};
+        out->grad_fn->backward = [a=shared_from_this(), b=other](const std::shared_ptr<Tensor>& self) {
+            if (a->requires_grad) a->grad += self->grad;
+            if (b->requires_grad) b->grad -= self->grad;
+        };
+    }
+
+    return out;
+}
+
+std::shared_ptr<Tensor> Tensor::operator/(float scalar) {
+    auto out = std::make_shared<Tensor>(data / scalar, requires_grad);
+
+    if (requires_grad) {
+        out->grad_fn = std::make_shared<GradFn>();
+        out->grad_fn->op_type = "divide";
+        out->grad_fn->parents = {shared_from_this()};
+        out->grad_fn->backward = [scalar, a=shared_from_this()](const std::shared_ptr<Tensor>& self) {
+            if (a->requires_grad) a->grad += self->grad / scalar;
+        };
+    }
+
+    return out;
+}
+
+std::shared_ptr<Tensor> Tensor::operator*(float scalar) {
+    auto out = std::make_shared<Tensor>(data * scalar, requires_grad);
+
+    if (requires_grad) {
+        out->grad_fn = std::make_shared<GradFn>();
+        out->grad_fn->op_type = "scalar multiply";
         out->grad_fn->parents = {shared_from_this()};
         out->grad_fn->backward = [scalar, a=shared_from_this()](const std::shared_ptr<Tensor>& self) {
             if (a->requires_grad) a->grad += self->grad * scalar;
@@ -74,14 +105,15 @@ std::shared_ptr<Tensor> Tensor::operator*(float scalar) {
     return out;
 }
 
-std::shared_ptr<Tensor> Tensor::dot(const std::shared_ptr<Tensor>& other) {
+
+std::shared_ptr<Tensor> Tensor::matmul(const std::shared_ptr<Tensor>& other) {
     assert(data.cols() == other->data.rows());
     bool req_grad = requires_grad || other->requires_grad;
     auto out = std::make_shared<Tensor>(data * other->data, req_grad);
 
     if (req_grad) {
         out->grad_fn = std::make_shared<GradFn>();
-        out->grad_fn->op_type = "dot";
+        out->grad_fn->op_type = "matmul";
         out->grad_fn->parents = {shared_from_this(), other};
         out->grad_fn->backward = [a=shared_from_this(), b=other](const std::shared_ptr<Tensor>& self) {
             if (a->requires_grad) a->grad += self->grad * b->data.transpose();
@@ -129,6 +161,79 @@ std::shared_ptr<Tensor> Tensor::sin() {
 
     return out;
 }
+
+std::shared_ptr<Tensor> Tensor::cos() {
+    Eigen::MatrixXf result = data.array().cos();
+    bool req_grad = requires_grad;
+    auto out = std::make_shared<Tensor>(result, req_grad);
+
+    if (req_grad) {
+        out->grad_fn = std::make_shared<GradFn>();
+        out->grad_fn->op_type = "cos";
+        out->grad_fn->parents = {shared_from_this()};
+        out->grad_fn->backward = [a=shared_from_this()](const std::shared_ptr<Tensor>& self) {
+            if (a->requires_grad) {
+                Eigen::MatrixXf deriv = -a->data.array().sin();
+                a->grad += self->grad.cwiseProduct(deriv);
+            }
+        };
+    }
+
+    return out;
+}
+
+
+std::vector<std::shared_ptr<Tensor>> Tensor::split_heads(int num_heads) {
+    int B_T = data.rows();
+    int d_model = data.cols();
+    assert(d_model % num_heads == 0);
+    int d_k = d_model / num_heads;
+
+    std::vector<std::shared_ptr<Tensor>> heads;
+    for (int h = 0; h < num_heads; ++h) {
+        Eigen::MatrixXf slice = data.middleCols(h * d_k, d_k);
+        heads.push_back(std::make_shared<Tensor>(slice, requires_grad));
+    }
+    return heads;
+}
+
+std::shared_ptr<Tensor> Tensor::concat_heads(const std::vector<std::shared_ptr<Tensor>>& heads) {
+    int rows = heads[0]->data.rows();
+    int total_cols = 0;
+    for (const auto& h : heads) total_cols += h->data.cols();
+
+    Eigen::MatrixXf result(rows, total_cols);
+    int col_offset = 0;
+    for (const auto& h : heads) {
+        result.middleCols(col_offset, h->data.cols()) = h->data;
+        col_offset += h->data.cols();
+    }
+    return std::make_shared<Tensor>(result);
+} 
+
+
+std::shared_ptr<Tensor> Tensor::transpose() {
+    auto out = std::make_shared<Tensor>(data.transpose(), requires_grad);
+
+    // May not need backwards/gradient tracking
+    if (requires_grad) {
+        out->grad_fn = std::make_shared<GradFn>();
+        out->grad_fn->op_type = "transpose";
+        out->grad_fn->parents = {shared_from_this()};
+        out->grad_fn->backward = [a=shared_from_this()](const std::shared_ptr<Tensor>& self) {
+            if (a->requires_grad) a->grad += self->grad.transpose();
+        };
+    }
+
+    return out;
+}
+
+std::shared_ptr<Tensor> Tensor::reshape(int new_rows, int new_cols) {
+    assert(new_rows * new_cols == data.size());
+    Eigen::MatrixXf reshaped = Eigen::Map<const Eigen::MatrixXf>(data.data(), new_rows, new_cols);
+    return std::make_shared<Tensor>(reshaped, requires_grad);
+}
+
 
 
 // ===== Utilities =====
